@@ -26,7 +26,7 @@ match_ident(const char *s)
     }
 }
 
-bool carg_chain(const char *chain, uslicelist_t *list);
+bool cargs_chain(const char *chain, uslicelist_t *list);
 
 int
 main(int argc, char *argv[])
@@ -39,7 +39,7 @@ main(int argc, char *argv[])
 
     ulog(UINFO, "parsing command chain: \"%s\"", argv[1]);
     uslicelist_t list;
-    if (carg_chain(argv[1], &list)) {
+    if (cargs_chain(argv[1], &list)) {
 
         for (int i = 0; i < list.count; i++) {
             ulog(UINFO, "  %.*s", list.items[i].len, list.items[i].str);
@@ -52,7 +52,7 @@ main(int argc, char *argv[])
 }
 
 bool
-carg_chain(const char *chain, uslicelist_t *list)
+cargs_chain(const char *chain, uslicelist_t *list)
 {
     da_init(list, 1);
     size_t len = strlen(chain);
