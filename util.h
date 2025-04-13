@@ -48,12 +48,22 @@ typedef struct {
     do { \
         UASSERT((da)->items != NULL); \
         free((da)->items); \
-        memset((da), 0, sizeof(*(da))); \
+        (da)->count = 0; \
+        (da)->capacity = 0; \
     } while (0)
 #define da_resize(da, len) \
     do { \
         (da)->items = urealloc((da)->items, sizeof(*(da)->items)*(len)); \
         (da)->capacity = (len); \
+    } while (0)
+#define da_reserve(da, len) \
+    do { \
+        if (((da)->count + (len)) >= (da)->capacity) { \
+            UASSERT((da)->capacity > 0); \
+            size_t c = (da)->capacity; \
+            do c *= 2; while (((da)->count + (len)) >= c); \
+            da_resize((da), c); \
+        } \
     } while (0)
 #define da_append(da, item) \
     do { \
@@ -63,15 +73,11 @@ typedef struct {
     } while (0)
 #define da_append_many(da, list, len) \
     do { \
-        if (((da)->count + (len)) >= (da)->capacity) { \
-            UASSERT((da)->capacity > 0); \
-            do (da)->capacity *= 2; \
-            while (((da)->count + (len)) >= (da)->capacity); \
-            da_resize((da), (da)->capacity); \
-        } \
+        da_reserve((da), (len)); \
         memcpy(&(da)->items[(da)->count], (list), sizeof(*(da)->items) * (len)); \
         (da)->count += (len); \
     } while (0)
+#define da_tail(da) ((da)->items + (da)->count)
 
 void *umalloc(size_t size);
 void *urealloc(void *p, size_t size);
