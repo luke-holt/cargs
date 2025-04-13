@@ -2,6 +2,7 @@
 Easy to integrate command line argument parsing. Simply provide the options and commands to parse and collect the input values.
 
 # Sample Usage
+Example code.
 ```C
 cargs_t cargs;
 cargs_init(&cargs);
@@ -28,6 +29,20 @@ ulog(UINFO, "flag 'b': %s", b?"true":"false");
 ulog(UINFO, "int 'i': %d", i);
 ulog(UINFO, "float 'f': %f", f);
 ulog(UINFO, "string 's': %s", s);
+```
+
+Example output.
+```
+$ ./carg-test -b -i 10 -f=123.45 -s "hello, world!"
+[INFO] found flag '-b'
+[INFO] found value '10' for flag '-i'
+[INFO] found value '123.449997' for flag '-f'
+[INFO] found string 'hello, world!' for flag '-s'
+[INFO] flag 'h': false
+[INFO] flag 'b': true
+[INFO] int 'i': 10
+[INFO] float 'f': 123.449997
+[INFO] string 's': hello, world!
 ```
 
 ## Help Message
