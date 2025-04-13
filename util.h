@@ -4,6 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define UTIL_ANSI_RED     "\x1b[31m"
+#define UTIL_ANSI_GREEN   "\x1b[32m"
+#define UTIL_ANSI_YELLOW  "\x1b[33m"
+#define UTIL_ANSI_BLUE    "\x1b[34m"
+#define UTIL_ANSI_MAGENTA "\x1b[35m"
+#define UTIL_ANSI_CYAN    "\x1b[36m"
+#define UTIL_ANSI_RESET   "\x1b[0m"
+
 typedef enum {
     UNONE = 0x01,
     UINFO = 0x02,
@@ -11,6 +19,7 @@ typedef enum {
     UFATL = 0x08,
     UPERR = 0x10,
     UTIME = 0x20,
+    UTODO = 0x40,
 } ulogflag_t;
 
 typedef struct {
@@ -19,23 +28,14 @@ typedef struct {
     char *items;
 } uarena_t;
 
-typedef struct {
-    size_t len;
-    const char *str;
-} uslice_t;
-
-typedef struct {
-    size_t count;
-    size_t capacity;
-    uslice_t *items;
-} uslicelist_t;
-
 #define UASSERT(c) \
     do { if (!(c)) { \
         ulog(UFATL, "%s:%d %s assertion failed '%s'", \
              __FILE__, __LINE__, __func__, #c); \
         abort(); \
     } } while (0)
+
+#define TODO(msg) ulog(UTODO, "%s:%d %s %s", __FILE__, __LINE__, __func__, msg)
 
 #define da_init(da, cap) \
     do { \
@@ -130,10 +130,11 @@ ulog(int flags, const char *fmt, ...)
                 ti->tm_hour, ti->tm_min, ti->tm_sec, ms);
     }
 
-    if (flags & UINFO) fprintf(stdout, "[INFO] ");
-    else if (flags & UWARN) fprintf(stdout, "[WARN] ");
-    else if (flags & UFATL) fprintf(stdout, "[FATL] ");
-    else if (flags & UPERR) fprintf(stdout, "[PERR] ");
+    if (flags & UINFO) fprintf(stdout, "[%sINFO%s] ", UTIL_ANSI_GREEN, UTIL_ANSI_RESET);
+    else if (flags & UWARN) fprintf(stdout, "[%sWARN%s] ", UTIL_ANSI_YELLOW, UTIL_ANSI_RESET);
+    else if (flags & UFATL) fprintf(stdout, "[%sFATL%s] ", UTIL_ANSI_RED, UTIL_ANSI_RESET);
+    else if (flags & UPERR) fprintf(stdout, "[%sPERR%s] ", UTIL_ANSI_MAGENTA, UTIL_ANSI_RESET);
+    else if (flags & UTODO) fprintf(stdout, "[%sTODO%s] ", UTIL_ANSI_BLUE, UTIL_ANSI_RESET);
 
     va_list args;
     va_start(args, fmt);
