@@ -271,7 +271,6 @@ parse_opt_flag(opt_t *opt, char *arg)
         ulog(UINFO, "found flag '%s'", opt->name);
         return 1;
     } else {
-        *(bool *)opt->ptr = (bool)opt->def;
         ulog(UWARN, "flag doesn't match (%s) (%s)", opt->name, arg);
         return -1;
     }
@@ -332,7 +331,8 @@ parse_opt_int(opt_t *opt, char *arg, char *nextarg)
         }
     }
 
-    *(int *)opt->ptr = (rc < 0) ? (int)opt->def : val;
+    if (rc > 0)
+        *(int *)opt->ptr = val;
 
     return rc;
 }
@@ -392,7 +392,8 @@ parse_opt_float(opt_t *opt, char *arg, char *nextarg)
         }
     }
 
-    *(float *)opt->ptr = (rc < 0) ? (float)opt->def : val;
+    if (rc > 0)
+        *(float *)opt->ptr = val;
 
     return rc;
 }
@@ -432,7 +433,8 @@ parse_opt_str(opt_t *opt, char *arg, char *nextarg)
         rc = 2;
     }
 
-    *(char **)opt->ptr = (rc < 0) ? (char *)opt->def : s;
+    if (rc > 0)
+        *(char **)opt->ptr = s;
 
     return rc;
 }
@@ -484,5 +486,30 @@ cargs_parse(cargs_t context, const char *name, int argc, char **argv)
         }
 
         i += n;
+    }
+
+    for (int i = 0; i < ctx->optlist.count; i++) {
+        opt_t *opt = &ctx->optlist.items[i];
+
+        if (opt->processed)
+            continue;
+
+        switch (opt->dtype) {
+        case CARGS_BOOL:
+            *(bool *)opt->ptr = (bool)opt->def;
+            break;
+        case CARGS_INT:
+            *(int *)opt->ptr = (int)opt->def;
+            break;
+        case CARGS_FLOAT:
+            *(float *)opt->ptr = (float)opt->def;
+            break;
+        case CARGS_STR:
+            *(char **)opt->ptr = (char *)opt->def;
+            break;
+        case CARGS_CHAIN:
+        default:
+            break;
+        }
     }
 }
