@@ -48,7 +48,7 @@ Options:
    -s   string option
 ```
 
-Example with valid inputs.
+Valid inputs.
 ```
 $ ./carg-test -b -i 10 -f=1.5 -s "hello"
 [INFO] flag 'h': false
@@ -58,9 +58,19 @@ $ ./carg-test -b -i 10 -f=1.5 -s "hello"
 [INFO] string 's': hello
 ```
 
-Example with invalid inputs
+Error reporting.
+```
+$ ./carg-test -i
+Missing operand for flag '-i'
+```
+```
+$ ./carg-test -f notafloat
+Invalid character for float flag '-f'
+notafloat
+^
+```
 ```
 $ ./carg-test -x
-unknown flag '-x'
+Unknown flag '-x'
 ```
 

@@ -79,7 +79,7 @@ newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, 
 
     int idx = optlist_best_match_name(&ctx->optlist, name);
     if ((idx >= 0) && (0 == strcmp(name, ctx->optlist.items[idx].name))) {
-        ustr_builder_printf(&ctx->errorlog, "flag '%s' already exists\n", name);
+        ustr_builder_printf(&ctx->errorlog, "Flag '%s' already exists\n", name);
         return true;
     }
 
@@ -146,7 +146,7 @@ parse_chain(ctx_t *ctx, const char *chain, uslicelist_t *list)
 
         // match error
         if (l < 0) {
-            ustr_builder_printf(&ctx->errorlog, "invalid char in chain\n");
+            ustr_builder_printf(&ctx->errorlog, "Invalid char in chain\n");
             ustr_builder_printf(&ctx->errorlog, "%s\n", chain);
             ustr_builder_printf(&ctx->errorlog, "%*s\n", i - l, "^");
             da_delete(list);
@@ -167,7 +167,7 @@ parse_chain(ctx_t *ctx, const char *chain, uslicelist_t *list)
 
         // trailing period
         else {
-            ustr_builder_printf(&ctx->errorlog, "trailing period in chain\n");
+            ustr_builder_printf(&ctx->errorlog, "Trailing period in chain\n");
             ustr_builder_printf(&ctx->errorlog, "%s\n", chain);
             ustr_builder_printf(&ctx->errorlog, "%*s\n", i+1, "^");
             da_delete(list);
@@ -283,7 +283,7 @@ parse_opt_flag(ctx_t *ctx, opt_t *opt, char *arg)
         *(bool *)opt->ptr = true;
         return 1;
     } else {
-        ustr_builder_printf(&ctx->errorlog, "flag doesn't match (%s) (%s)\n", opt->name, arg);
+        ustr_builder_printf(&ctx->errorlog, "Flag doesn't match (%s) (%s)\n", opt->name, arg);
         return -1;
     }
 }
@@ -293,7 +293,6 @@ parse_opt_int(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 {
     UASSERT(opt);
     UASSERT(arg);
-    UASSERT(nextarg);
 
     size_t arglen = strlen(arg);
     int rc;
@@ -313,7 +312,7 @@ parse_opt_int(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 
         // invalid character in string following flag
         else {
-            ustr_builder_printf(&ctx->errorlog, "invalid character for integer flag\n");
+            ustr_builder_printf(&ctx->errorlog, "Invalid character for integer flag\n");
             ustr_builder_printf(&ctx->errorlog, "%s\n", arg);
             ustr_builder_printf(&ctx->errorlog, "%*s\n", end - arg + 1, "^");
             rc = -1;
@@ -322,7 +321,7 @@ parse_opt_int(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 
     // missing operand
     else if (nextarg == NULL) {
-        ustr_builder_printf(&ctx->errorlog, "missing operand for flag '%s'\n", arg);
+        ustr_builder_printf(&ctx->errorlog, "Missing operand for flag '%s'\n", arg);
         rc = -1;
     }
 
@@ -332,7 +331,7 @@ parse_opt_int(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
         val = strtol(nextarg, &end, 10);
 
         if (end - nextarg != strlen(nextarg)) {
-            ustr_builder_printf(&ctx->errorlog, "invalid character for integer flag '%s'\n", arg);
+            ustr_builder_printf(&ctx->errorlog, "Invalid character for integer flag '%s'\n", arg);
             ustr_builder_printf(&ctx->errorlog, "%s\n", nextarg);
             ustr_builder_printf(&ctx->errorlog, "%*s\n", end - nextarg + 1, "^");
             rc = -1;
@@ -352,7 +351,6 @@ parse_opt_float(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 {
     UASSERT(opt);
     UASSERT(arg);
-    UASSERT(nextarg);
 
     size_t arglen = strlen(arg);
     int rc;
@@ -372,7 +370,7 @@ parse_opt_float(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 
         // invalid character in string following flag
         else {
-            ustr_builder_printf(&ctx->errorlog, "invalid character for float flag\n");
+            ustr_builder_printf(&ctx->errorlog, "Invalid character for float flag\n");
             ustr_builder_printf(&ctx->errorlog, "%s\n", arg);
             ustr_builder_printf(&ctx->errorlog, "%*s\n", end - arg + 1, "^");
             rc = -1;
@@ -381,7 +379,7 @@ parse_opt_float(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 
     // missing operand
     else if (nextarg == NULL) {
-        ustr_builder_printf(&ctx->errorlog, "missing operand for flag '%s'\n", arg);
+        ustr_builder_printf(&ctx->errorlog, "Missing operand for flag '%s'\n", arg);
         rc = -1;
     }
 
@@ -391,7 +389,7 @@ parse_opt_float(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
         val = strtof(nextarg, &end);
 
         if (end - nextarg != strlen(nextarg)) {
-            ustr_builder_printf(&ctx->errorlog, "invalid character for float flag '%s'\n", arg);
+            ustr_builder_printf(&ctx->errorlog, "Invalid character for float flag '%s'\n", arg);
             ustr_builder_printf(&ctx->errorlog, "%s\n", nextarg);
             ustr_builder_printf(&ctx->errorlog, "%*s\n", end - nextarg + 1, "^");
             rc = -1;
@@ -411,7 +409,6 @@ parse_opt_str(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 {
     UASSERT(opt);
     UASSERT(arg);
-    UASSERT(nextarg);
 
     size_t arglen = strlen(arg);
     int rc;
@@ -428,7 +425,7 @@ parse_opt_str(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 
     // missing operand
     else if (nextarg == NULL) {
-        ustr_builder_printf(&ctx->errorlog, "missing operand for flag '%s'\n", opt->name);
+        ustr_builder_printf(&ctx->errorlog, "Missing operand for flag '%s'\n", opt->name);
         rc = -1;
     }
 
@@ -457,14 +454,16 @@ cargs_parse(cargs_t context, const char *name, int argc, char **argv)
 
         int optidx = optlist_best_match_name(&ctx->optlist, arg);
         if (optidx < 0) {
-            ustr_builder_printf(&ctx->errorlog, "unknown flag '%s'\n", arg);
+            ustr_builder_printf(&ctx->errorlog, "Unknown flag '%s'\n", arg);
             return true;
         }
 
         opt_t *opt = &ctx->optlist.items[optidx];
 
-        if (opt->processed)
-            ustr_builder_printf(&ctx->errorlog, "already processed flag '%s'\n", opt->name);
+        if (opt->processed) {
+            ustr_builder_printf(&ctx->errorlog, "Duplicate flag '%s'\n", opt->name);
+            return true;
+        }
 
         int n;
 
@@ -481,14 +480,10 @@ cargs_parse(cargs_t context, const char *name, int argc, char **argv)
         }
 
         // error
-        if (n < 0) {
-            ustr_builder_printf(&ctx->errorlog, "parse error for arg dtype '%s' '%d'\n", arg, opt->dtype);
-            i++;
-            continue;
-        } else {
-            opt->processed = true;
-        }
+        if (n < 0)
+            return true;
 
+        opt->processed = true;
         i += n;
     }
 
