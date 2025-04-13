@@ -77,7 +77,9 @@ typedef struct {
         memcpy(&(da)->items[(da)->count], (list), sizeof(*(da)->items) * (len)); \
         (da)->count += (len); \
     } while (0)
-#define da_tail(da) ((da)->items + (da)->count)
+#define da_endptr(da) ((da)->items + (da)->count)
+#define da_last_item(da) (&(da)->items[(da)->count-1])
+#define da_pop(da) ((da)->count--)
 
 void *umalloc(size_t size);
 void *urealloc(void *p, size_t size);

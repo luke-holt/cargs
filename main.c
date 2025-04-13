@@ -25,7 +25,11 @@ main(int argc, char *argv[])
 
     const char *helpmsg = cargs_help(cargs, argv[0]);
 
-    cargs_parse(cargs, argv[0], --argc, &argv[1]);
+    bool err = cargs_parse(cargs, argv[0], --argc, &argv[1]);
+    if (err) {
+        ulog(UNONE, "%s", cargs_error(cargs));
+        exit(0);
+    }
 
     cargs_delete(&cargs);
 

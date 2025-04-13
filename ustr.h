@@ -44,7 +44,6 @@ void ustr_builder_concat_var(ustr_builder_t *builder, ...);
 #endif // USTR_H
 
 
-#define USTR_IMPL
 #ifdef USTR_IMPL
 
 #include <string.h>
@@ -74,6 +73,13 @@ ustr_builder_leak(ustr_builder_t *builder)
     char *s = builder->items;
     memset(builder, 0, sizeof(*builder));
     return s;
+}
+
+char *
+ustr_builder_terminate(ustr_builder_t *builder)
+{
+    da_append(builder, '\0');
+    return builder->items;
 }
 
 void

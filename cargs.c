@@ -38,17 +38,18 @@ typedef struct {
 typedef struct {
     uarena_t arena;
     optlist_t optlist;
+    ustr_builder_t errorlog;
     int namemaxlen;
     int helpmaxlen;
 } ctx_t;
 
 static bool newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, uintptr_t def, dtype_t dtype);
-static bool parse_chain(const char *chain, uslicelist_t *list);
+static bool parse_chain(ctx_t *ctx, const char *chain, uslicelist_t *list);
 
-static int parse_opt_flag(opt_t *opt, char *arg);
-static int parse_opt_int(opt_t *opt, char *arg, char *nextarg);
-static int parse_opt_float(opt_t *opt, char *arg, char *nextarg);
-static int parse_opt_str(opt_t *opt, char *arg, char *nextarg);
+static int parse_opt_flag(ctx_t *ctx, opt_t *opt, char *arg);
+static int parse_opt_int(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
+static int parse_opt_float(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
+static int parse_opt_str(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
 
 static int optlist_best_match_name(optlist_t *list, const char *name);
 
@@ -78,15 +79,15 @@ newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, 
 
     int idx = optlist_best_match_name(&ctx->optlist, name);
     if ((idx >= 0) && (0 == strcmp(name, ctx->optlist.items[idx].name))) {
-        ulog(UWARN, "flag '%s' already exists", name);
-        return false;
+        ustr_builder_printf(&ctx->errorlog, "flag '%s' already exists\n", name);
+        return true;
     }
 
     opt_t opt;
     char *s;
 
     // copy name to arena
-    s = da_tail(&ctx->arena);
+    s = da_endptr(&ctx->arena);
     opt.namelen = strlen(name);
     da_append_many(&ctx->arena, name, opt.namelen + 1);
     s[opt.namelen] = '\0';
@@ -96,7 +97,7 @@ newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, 
         ctx->namemaxlen = opt.namelen;
 
     // copy help to &ctx->arena
-    s = da_tail(&ctx->arena);
+    s = da_endptr(&ctx->arena);
     opt.helplen = strlen(help);
     da_append_many(&ctx->arena, help, opt.helplen + 1);
     s[opt.helplen] = '\0';
@@ -113,7 +114,7 @@ newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, 
 
     da_append(&ctx->optlist, opt);
 
-    return true;
+    return false;
 }
 
 
@@ -134,7 +135,7 @@ match_ident(const char *s)
 }
 
 bool
-parse_chain(const char *chain, uslicelist_t *list)
+parse_chain(ctx_t *ctx, const char *chain, uslicelist_t *list)
 {
     da_init(list, 1);
     size_t len = strlen(chain);
@@ -145,11 +146,11 @@ parse_chain(const char *chain, uslicelist_t *list)
 
         // match error
         if (l < 0) {
-            ulog(UWARN, "invalid char in chain");
-            ulog(UWARN, "%s", chain);
-            ulog(UWARN, "%*s", i - l, "^");
+            ustr_builder_printf(&ctx->errorlog, "invalid char in chain\n");
+            ustr_builder_printf(&ctx->errorlog, "%s\n", chain);
+            ustr_builder_printf(&ctx->errorlog, "%*s\n", i - l, "^");
             da_delete(list);
-            return false;
+            return true;
         }
 
         // add slice to list
@@ -166,16 +167,16 @@ parse_chain(const char *chain, uslicelist_t *list)
 
         // trailing period
         else {
-            ulog(UWARN, "trailing period in chain");
-            ulog(UWARN, "%s", chain);
-            ulog(UWARN, "%*s", i+1, "^");
+            ustr_builder_printf(&ctx->errorlog, "trailing period in chain\n");
+            ustr_builder_printf(&ctx->errorlog, "%s\n", chain);
+            ustr_builder_printf(&ctx->errorlog, "%*s\n", i+1, "^");
             da_delete(list);
-            return false;
+            return true;
         }
     }
 
     da_resize(list, list->count);
-    return true;
+    return false;
 }
 
 void
@@ -185,6 +186,7 @@ cargs_init(cargs_t *context)
     ctx_t *ctx = umalloc(sizeof(ctx_t));
     da_init(&ctx->arena, 4096);
     da_init(&ctx->optlist, 1);
+    ustr_builder_alloc(&ctx->errorlog);
     ctx->namemaxlen = 0;
     ctx->helpmaxlen = 0;
     *context = (cargs_t)ctx;
@@ -198,8 +200,20 @@ cargs_delete(cargs_t *context)
     ctx_t *ctx = (ctx_t *)*context;
     da_delete(&ctx->arena);
     da_delete(&ctx->optlist);
+    if (ctx->errorlog.items)
+        ustr_builder_free(&ctx->errorlog);
     free(ctx);
     *context = (cargs_t)NULL;
+}
+
+const char *
+cargs_error(cargs_t context)
+{
+    UASSERT(context);
+    ctx_t *ctx = (ctx_t *)context;
+    if (*da_last_item(&ctx->errorlog) == '\n')
+        da_pop(&ctx->errorlog);
+    return ustr_builder_terminate(&ctx->errorlog);
 }
 
 bool
@@ -251,8 +265,7 @@ cargs_help(cargs_t context, const char *name)
 
     size_t len = 0;
     for (int i = 0; i < ctx->optlist.count; i++) {
-        ustr_builder_printf(&helpmsg, "   %-*s   ", nw, ctx->optlist.items[i].name);
-        ustr_builder_printf(&helpmsg, "%s", ctx->optlist.items[i].help);
+        ustr_builder_printf(&helpmsg, "   %-*s   %s", nw, ctx->optlist.items[i].name, ctx->optlist.items[i].help);
         if (i < ctx->optlist.count - 1)
             da_append(&helpmsg, '\n');
     }
@@ -261,23 +274,22 @@ cargs_help(cargs_t context, const char *name)
 }
 
 int
-parse_opt_flag(opt_t *opt, char *arg)
+parse_opt_flag(ctx_t *ctx, opt_t *opt, char *arg)
 {
     UASSERT(opt);
     UASSERT(arg);
 
     if (opt->namelen == strlen(arg)) {
         *(bool *)opt->ptr = true;
-        ulog(UINFO, "found flag '%s'", opt->name);
         return 1;
     } else {
-        ulog(UWARN, "flag doesn't match (%s) (%s)", opt->name, arg);
+        ustr_builder_printf(&ctx->errorlog, "flag doesn't match (%s) (%s)\n", opt->name, arg);
         return -1;
     }
 }
 
 int
-parse_opt_int(opt_t *opt, char *arg, char *nextarg)
+parse_opt_int(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 {
     UASSERT(opt);
     UASSERT(arg);
@@ -296,22 +308,21 @@ parse_opt_int(opt_t *opt, char *arg, char *nextarg)
 
         // valid integer following flag
         if (end - arg == arglen) {
-            ulog(UINFO, "found value '%li' for flag '%s'", val, opt->name);
             rc = 1;
         }
 
         // invalid character in string following flag
         else {
-            ulog(UWARN, "invalid character for integer flag");
-            ulog(UWARN, "%s", arg);
-            ulog(UWARN, "%*s", end - arg + 1, "^");
+            ustr_builder_printf(&ctx->errorlog, "invalid character for integer flag\n");
+            ustr_builder_printf(&ctx->errorlog, "%s\n", arg);
+            ustr_builder_printf(&ctx->errorlog, "%*s\n", end - arg + 1, "^");
             rc = -1;
         }
     }
 
     // missing operand
     else if (nextarg == NULL) {
-        ulog(UWARN, "missing operand for flag '%s'", arg);
+        ustr_builder_printf(&ctx->errorlog, "missing operand for flag '%s'\n", arg);
         rc = -1;
     }
 
@@ -321,12 +332,11 @@ parse_opt_int(opt_t *opt, char *arg, char *nextarg)
         val = strtol(nextarg, &end, 10);
 
         if (end - nextarg != strlen(nextarg)) {
-            ulog(UWARN, "invalid character for integer flag '%s'", arg);
-            ulog(UWARN, "%s", nextarg);
-            ulog(UWARN, "%*s", end - nextarg + 1, "^");
+            ustr_builder_printf(&ctx->errorlog, "invalid character for integer flag '%s'\n", arg);
+            ustr_builder_printf(&ctx->errorlog, "%s\n", nextarg);
+            ustr_builder_printf(&ctx->errorlog, "%*s\n", end - nextarg + 1, "^");
             rc = -1;
         } else {
-            ulog(UINFO, "found value '%li' for flag '%s'", val, opt->name);
             rc = 2;
         }
     }
@@ -338,7 +348,7 @@ parse_opt_int(opt_t *opt, char *arg, char *nextarg)
 }
 
 int
-parse_opt_float(opt_t *opt, char *arg, char *nextarg)
+parse_opt_float(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 {
     UASSERT(opt);
     UASSERT(arg);
@@ -357,22 +367,21 @@ parse_opt_float(opt_t *opt, char *arg, char *nextarg)
 
         // valid float following flag
         if (end - arg == arglen) {
-            ulog(UINFO, "found value '%f' for flag '%s'", val, opt->name);
             rc = 1;
         }
 
         // invalid character in string following flag
         else {
-            ulog(UWARN, "invalid character for float flag");
-            ulog(UWARN, "%s", arg);
-            ulog(UWARN, "%*s", end - arg + 1, "^");
+            ustr_builder_printf(&ctx->errorlog, "invalid character for float flag\n");
+            ustr_builder_printf(&ctx->errorlog, "%s\n", arg);
+            ustr_builder_printf(&ctx->errorlog, "%*s\n", end - arg + 1, "^");
             rc = -1;
         }
     }
 
     // missing operand
     else if (nextarg == NULL) {
-        ulog(UWARN, "missing operand for flag '%s'", arg);
+        ustr_builder_printf(&ctx->errorlog, "missing operand for flag '%s'\n", arg);
         rc = -1;
     }
 
@@ -382,12 +391,11 @@ parse_opt_float(opt_t *opt, char *arg, char *nextarg)
         val = strtof(nextarg, &end);
 
         if (end - nextarg != strlen(nextarg)) {
-            ulog(UWARN, "invalid character for float flag '%s'", arg);
-            ulog(UWARN, "%s", nextarg);
-            ulog(UWARN, "%*s", end - nextarg + 1, "^");
+            ustr_builder_printf(&ctx->errorlog, "invalid character for float flag '%s'\n", arg);
+            ustr_builder_printf(&ctx->errorlog, "%s\n", nextarg);
+            ustr_builder_printf(&ctx->errorlog, "%*s\n", end - nextarg + 1, "^");
             rc = -1;
         } else {
-            ulog(UINFO, "found value '%e' for flag '%s'", val, opt->name);
             rc = 2;
         }
     }
@@ -399,7 +407,7 @@ parse_opt_float(opt_t *opt, char *arg, char *nextarg)
 }
 
 int
-parse_opt_str(opt_t *opt, char *arg, char *nextarg)
+parse_opt_str(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 {
     UASSERT(opt);
     UASSERT(arg);
@@ -415,21 +423,18 @@ parse_opt_str(opt_t *opt, char *arg, char *nextarg)
             ? arg + opt->namelen + 1
             : arg + opt->namelen;
 
-        ulog(UINFO, "found string '%s' for flag '%s'", s, opt->name);
-
         rc = 1;
     }
 
     // missing operand
     else if (nextarg == NULL) {
-        ulog(UWARN, "missing operand for flag '%s'", opt->name);
+        ustr_builder_printf(&ctx->errorlog, "missing operand for flag '%s'\n", opt->name);
         rc = -1;
     }
 
     // check nextarg
     else {
         s = nextarg;
-        ulog(UINFO, "found string '%s' for flag '%s'", s, opt->name);
         rc = 2;
     }
 
@@ -439,7 +444,7 @@ parse_opt_str(opt_t *opt, char *arg, char *nextarg)
     return rc;
 }
 
-void
+bool
 cargs_parse(cargs_t context, const char *name, int argc, char **argv)
 {
     UASSERT(context);
@@ -452,33 +457,32 @@ cargs_parse(cargs_t context, const char *name, int argc, char **argv)
 
         int optidx = optlist_best_match_name(&ctx->optlist, arg);
         if (optidx < 0) {
-            ulog(UWARN, "unable to match option '%s'", arg);
-            i++;
-            continue;
+            ustr_builder_printf(&ctx->errorlog, "unknown flag '%s'\n", arg);
+            return true;
         }
 
         opt_t *opt = &ctx->optlist.items[optidx];
 
         if (opt->processed)
-            ulog(UWARN, "already processed flag '%s'", opt->name);
+            ustr_builder_printf(&ctx->errorlog, "already processed flag '%s'\n", opt->name);
 
         int n;
 
         switch (opt->dtype) {
-        case CARGS_BOOL: n = parse_opt_flag(opt, arg); break;
-        case CARGS_INT: n = parse_opt_int(opt, arg, nextarg); break;
-        case CARGS_FLOAT: n = parse_opt_float(opt, arg, nextarg); break;
-        case CARGS_STR: n = parse_opt_str(opt, arg, nextarg); break;
+        case CARGS_BOOL: n = parse_opt_flag(ctx, opt, arg); break;
+        case CARGS_INT: n = parse_opt_int(ctx, opt, arg, nextarg); break;
+        case CARGS_FLOAT: n = parse_opt_float(ctx, opt, arg, nextarg); break;
+        case CARGS_STR: n = parse_opt_str(ctx, opt, arg, nextarg); break;
         case CARGS_CHAIN:
         default:
             n = -1;
-            ulog(UWARN, "unimplemented arg dtype '%d'", opt->dtype);
+            ustr_builder_printf(&ctx->errorlog, "unimplemented arg dtype '%d'\n", opt->dtype);
             break;
         }
 
         // error
         if (n < 0) {
-            ulog(UWARN, "parse error for arg dtype '%s' '%d'", arg, opt->dtype);
+            ustr_builder_printf(&ctx->errorlog, "parse error for arg dtype '%s' '%d'\n", arg, opt->dtype);
             i++;
             continue;
         } else {
@@ -512,4 +516,6 @@ cargs_parse(cargs_t context, const char *name, int argc, char **argv)
             break;
         }
     }
+
+    return false;
 }

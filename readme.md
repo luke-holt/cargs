@@ -15,7 +15,11 @@ cargs_add_opt_str(cargs, &s, "default string", "-s", "string option");
 
 const char *helpmsg = cargs_help(cargs, argv[0]);
 
-cargs_parse(cargs, argv[0], --argc, &argv[1]);
+bool err = cargs_parse(cargs, argv[0], --argc, &argv[1]);
+if (err) {
+    ulog(UNONE, "%s", cargs_error(cargs));
+    exit(0);
+}
 
 cargs_delete(&cargs);
 
@@ -31,25 +35,9 @@ ulog(UINFO, "float 'f': %f", f);
 ulog(UINFO, "string 's': %s", s);
 ```
 
-Example output.
+Auto generated help message.
 ```
-$ ./carg-test -b -i 10 -f=123.45 -s "hello, world!"
-[INFO] found flag '-b'
-[INFO] found value '10' for flag '-i'
-[INFO] found value '123.449997' for flag '-f'
-[INFO] found string 'hello, world!' for flag '-s'
-[INFO] flag 'h': false
-[INFO] flag 'b': true
-[INFO] int 'i': 10
-[INFO] float 'f': 123.449997
-[INFO] string 's': hello, world!
-```
-
-## Help Message
-The help message is generated automatically, here is an example.
-
-```
-$ ./cargs-test -h
+$ ./carg-test -h
 Usage: ./carg-test [FLAGS] [OPTIONS] command
 
 Options:
@@ -59,3 +47,20 @@ Options:
    -f   float option
    -s   string option
 ```
+
+Example with valid inputs.
+```
+$ ./carg-test -b -i 10 -f=1.5 -s "hello"
+[INFO] flag 'h': false
+[INFO] flag 'b': true
+[INFO] int 'i': 10
+[INFO] float 'f': 1.500000
+[INFO] string 's': hello
+```
+
+Example with invalid inputs
+```
+$ ./carg-test -x
+unknown flag '-x'
+```
+
