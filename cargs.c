@@ -22,6 +22,7 @@ typedef struct {
     const char *help;
     void *ptr;
     int *ptrlen;
+    uintptr_t def;
     dtype_t dtype;
     int namelen;
     int helplen;
@@ -41,7 +42,7 @@ typedef struct {
     int helpmaxlen;
 } ctx_t;
 
-static bool newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, dtype_t dtype);
+static bool newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, uintptr_t def, dtype_t dtype);
 static bool parse_chain(const char *chain, uslicelist_t *list);
 
 static int parse_opt_flag(opt_t *opt, char *arg);
@@ -68,7 +69,7 @@ optlist_best_match_name(optlist_t *list, const char *name)
 }
 
 bool
-newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, dtype_t dtype)
+newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, uintptr_t def, dtype_t dtype)
 {
     UASSERT(ctx);
     UASSERT(name);
@@ -108,6 +109,7 @@ newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, 
     opt.ptrlen = ptrlen;
     opt.dtype = dtype;
     opt.processed = false;
+    opt.def = def;
 
     da_append(&ctx->optlist, opt);
 
@@ -201,31 +203,31 @@ cargs_delete(cargs_t *context)
 }
 
 bool
-cargs_add_opt_flag(cargs_t context, bool *v, const char *name, const char *help)
+cargs_add_opt_flag(cargs_t context, bool *v, bool def, const char *name, const char *help)
 {
     UASSERT(context);
-    return newopt((ctx_t *)context, name, help, (void *)v, NULL, CARGS_BOOL);
+    return newopt((ctx_t *)context, name, help, (void *)v, NULL, (uintptr_t)def, CARGS_BOOL);
 }
 
 bool
-cargs_add_opt_int(cargs_t context, int *v, const char *name, const char *help)
+cargs_add_opt_int(cargs_t context, int *v, int def, const char *name, const char *help)
 {
     UASSERT(context);
-    return newopt((ctx_t *)context, name, help, (void *)v, NULL, CARGS_INT);
+    return newopt((ctx_t *)context, name, help, (void *)v, NULL, (uintptr_t)def, CARGS_INT);
 }
 
 bool
-cargs_add_opt_float(cargs_t context, float *v, const char *name, const char *help)
+cargs_add_opt_float(cargs_t context, float *v, float def, const char *name, const char *help)
 {
     UASSERT(context);
-    return newopt((ctx_t *)context, name, help, (void *)v, NULL, CARGS_FLOAT);
+    return newopt((ctx_t *)context, name, help, (void *)v, NULL, (uintptr_t)def, CARGS_FLOAT);
 }
 
 bool
-cargs_add_opt_str(cargs_t context, char **v, const char *name, const char *help)
+cargs_add_opt_str(cargs_t context, char **v, const char *def, const char *name, const char *help)
 {
     UASSERT(context);
-    return newopt((ctx_t *)context, name, help, (void *)v, NULL, CARGS_STR);
+    return newopt((ctx_t *)context, name, help, (void *)v, NULL, (uintptr_t)def, CARGS_STR);
 }
 
 // void
@@ -269,6 +271,7 @@ parse_opt_flag(opt_t *opt, char *arg)
         ulog(UINFO, "found flag '%s'", opt->name);
         return 1;
     } else {
+        *(bool *)opt->ptr = (bool)opt->def;
         ulog(UWARN, "flag doesn't match (%s) (%s)", opt->name, arg);
         return -1;
     }
@@ -329,7 +332,7 @@ parse_opt_int(opt_t *opt, char *arg, char *nextarg)
         }
     }
 
-    *(int *)opt->ptr = (rc < 0) ? 0.0 : val;
+    *(int *)opt->ptr = (rc < 0) ? (int)opt->def : val;
 
     return rc;
 }
@@ -389,7 +392,7 @@ parse_opt_float(opt_t *opt, char *arg, char *nextarg)
         }
     }
 
-    *(float *)opt->ptr = (rc < 0) ? 0.0 : val;
+    *(float *)opt->ptr = (rc < 0) ? (float)opt->def : val;
 
     return rc;
 }
@@ -429,7 +432,7 @@ parse_opt_str(opt_t *opt, char *arg, char *nextarg)
         rc = 2;
     }
 
-    *(char **)opt->ptr = (rc < 0) ? NULL : s;
+    *(char **)opt->ptr = (rc < 0) ? (char *)opt->def : s;
 
     return rc;
 }

@@ -18,11 +18,11 @@ main(int argc, char *argv[])
 
     cargs_init(&cargs);
 
-    cargs_add_opt_flag(cargs, &b, "-b", "flag");
-    cargs_add_opt_flag(cargs, &blag, "-blag", "flag");
-    cargs_add_opt_int(cargs, &i, "-i", "int");
-    cargs_add_opt_float(cargs, &f, "-f", "float");
-    cargs_add_opt_str(cargs, &s, "-s", "string");
+    cargs_add_opt_flag(cargs, &b, false, "-b", "flag");
+    cargs_add_opt_flag(cargs, &blag, false, "-blag", "flag");
+    cargs_add_opt_int(cargs, &i, 69, "-i", "int");
+    cargs_add_opt_float(cargs, &f, 123.321, "-f", "float");
+    cargs_add_opt_str(cargs, &s, "default string", "-s", "string");
 
     ulog(UNONE, "%s", cargs_help(cargs, argv[0]));
 
