@@ -20,7 +20,6 @@ bool cargs_add_opt_flag(cargs_t context, bool *v, bool def, const char *name, co
 bool cargs_add_opt_int(cargs_t context, int *v, int def, const char *name, const char *help);
 bool cargs_add_opt_float(cargs_t context, float *v, float def, const char *name, const char *help);
 bool cargs_add_opt_str(cargs_t context, char **v, const char *def, const char *name, const char *help);
-
-bool cargs_add_opt_list(cargs_t context, char ***v, int *vlen, char delim, const char *name, const char *help);
+bool cargs_add_opt_str_list(cargs_t context, char ***v, int *vlen, char delim, const char *name, const char *help);
 
 #endif // CARGS_H

@@ -50,7 +50,7 @@ static int parse_opt_flag(ctx_t *ctx, opt_t *opt, char *arg);
 static int parse_opt_int(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
 static int parse_opt_float(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
 static int parse_opt_str(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
-static int parse_opt_list(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
+static int parse_opt_str_list(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
 
 static int match_ident(const char *s, char delim);
 static int optlist_best_match_name(optlist_t *list, const char *name);
@@ -137,7 +137,7 @@ match_ident(const char *s, char delim)
 }
 
 int
-parse_opt_list(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
+parse_opt_str_list(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 {
     struct strlist {
         int count;
@@ -272,7 +272,7 @@ cargs_add_opt_str(cargs_t context, char **v, const char *def, const char *name, 
 }
 
 bool
-cargs_add_opt_list(cargs_t context, char ***v, int *vlen, char delim, const char *name, const char *help)
+cargs_add_opt_str_list(cargs_t context, char ***v, int *vlen, char delim, const char *name, const char *help)
 {
     UASSERT(context);
     return newopt((ctx_t *)context, name, help, (void *)v, vlen, delim, 0, CARGS_LIST);
@@ -503,7 +503,7 @@ cargs_parse(cargs_t context, const char *name, int argc, char **argv)
         case CARGS_INT: n = parse_opt_int(ctx, opt, arg, nextarg); break;
         case CARGS_FLOAT: n = parse_opt_float(ctx, opt, arg, nextarg); break;
         case CARGS_STR: n = parse_opt_str(ctx, opt, arg, nextarg); break;
-        case CARGS_LIST: n = parse_opt_list(ctx, opt, arg, nextarg); break;
+        case CARGS_LIST: n = parse_opt_str_list(ctx, opt, arg, nextarg); break;
         default:
             UASSERT(0 && "unreachable");
             break;
