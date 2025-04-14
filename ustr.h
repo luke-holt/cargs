@@ -5,20 +5,6 @@
 
 #define isletter(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
 #define isnumber(c) (c >= '0' && c <= '9')
-#define isuscore(c) (c == '_')
-#define isperiod(c) (c == '.')
-#define iseos(c) (c == '\0')
-
-typedef struct {
-    size_t len;
-    const char *str;
-} uslice_t;
-
-typedef struct {
-    size_t count;
-    size_t capacity;
-    uslice_t *items;
-} uslicelist_t;
 
 typedef struct {
     size_t count;
@@ -36,10 +22,11 @@ void ustr_builder_free(ustr_builder_t *builder);
 char *ustr_builder_leak(ustr_builder_t *builder);
 
 void ustr_builder_putc(ustr_builder_t *builder, char c);
-void ustr_builder_puts(ustr_builder_t *builder, const char *s);
-void ustr_builder_printf(ustr_builder_t *builder, const char *fmt, ...);
-void ustr_builder_concat_list(ustr_builder_t *builder, const char **s, int count);
-void ustr_builder_concat_var(ustr_builder_t *builder, ...);
+char *ustr_builder_puts(ustr_builder_t *builder, const char *s);
+char *ustr_builder_printf(ustr_builder_t *builder, const char *fmt, ...);
+char *ustr_builder_concat_list(ustr_builder_t *builder, const char **s, int count);
+char *ustr_builder_concat_var(ustr_builder_t *builder, ...);
+void ustr_builder_terminate(ustr_builder_t *builder);
 
 #endif // USTR_H
 
@@ -75,11 +62,10 @@ ustr_builder_leak(ustr_builder_t *builder)
     return s;
 }
 
-char *
+void
 ustr_builder_terminate(ustr_builder_t *builder)
 {
     da_append(builder, '\0');
-    return builder->items;
 }
 
 void
@@ -89,19 +75,23 @@ ustr_builder_putc(ustr_builder_t *builder, char c)
     da_append(builder, c);
 }
 
-void
+char *
 ustr_builder_puts(ustr_builder_t *builder, const char *s)
 {
     UASSERT(builder);
     UASSERT(s);
+    char *str = builder->items + builder->count;
     da_append_many(builder, s, strlen(s));
+    return str;
 }
 
-void
+char *
 ustr_builder_printf(ustr_builder_t *builder, const char *fmt, ...)
 {
     UASSERT(builder);
     UASSERT(fmt);
+
+    char *s = builder->items + builder->count;
 
     va_list args;
     va_start(args, fmt);
@@ -114,26 +104,32 @@ ustr_builder_printf(ustr_builder_t *builder, const char *fmt, ...)
     va_end(args);
 
     builder->count += len;
+
+    return s;
 }
 
-void
+char *
 ustr_builder_concat_list(ustr_builder_t *builder, const char **s, int count)
 {
+    char *str = builder->items + builder->count;
     while (count--) {
         da_append_many(builder, *s, strlen(*s));
         s++;
     }
+    return str;
 }
 
-void
+char *
 ustr_builder_concat_var(ustr_builder_t *builder, ...)
 {
+    char *s = builder->items + builder->count;
     va_list args;
     va_start(args, builder);
-    char *s;
-    while ((s = va_arg(args, char *)) != 0)
-        da_append_many(builder, s, strlen(s));
+    char *a;
+    while ((a = va_arg(args, char *)) != 0)
+        da_append_many(builder, a, strlen(s));
     va_end(args);
+    return s;
 }
 
 #endif // USTR_IMPL

@@ -14,7 +14,7 @@ typedef enum {
     CARGS_INT,
     CARGS_FLOAT,
     CARGS_STR,
-    CARGS_CHAIN,
+    CARGS_LIST,
 } dtype_t;
 
 typedef struct {
@@ -27,6 +27,7 @@ typedef struct {
     int namelen;
     int helplen;
     bool processed;
+    char delim;
 } opt_t;
 
 typedef struct {
@@ -36,21 +37,22 @@ typedef struct {
 } optlist_t;
 
 typedef struct {
-    uarena_t arena;
+    ustr_builder_t arena;
     optlist_t optlist;
     ustr_builder_t errorlog;
     int namemaxlen;
     int helpmaxlen;
 } ctx_t;
 
-static bool newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, uintptr_t def, dtype_t dtype);
-static bool parse_chain(ctx_t *ctx, const char *chain, uslicelist_t *list);
+static bool newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, int *ptrlen, char delim, uintptr_t def, dtype_t dtype);
 
 static int parse_opt_flag(ctx_t *ctx, opt_t *opt, char *arg);
 static int parse_opt_int(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
 static int parse_opt_float(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
 static int parse_opt_str(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
+static int parse_opt_list(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg);
 
+static int match_ident(const char *s, char delim);
 static int optlist_best_match_name(optlist_t *list, const char *name);
 
 int
@@ -70,7 +72,7 @@ optlist_best_match_name(optlist_t *list, const char *name)
 }
 
 bool
-newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, uintptr_t def, dtype_t dtype)
+newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, int *ptrlen, char delim, uintptr_t def, dtype_t dtype)
 {
     UASSERT(ctx);
     UASSERT(name);
@@ -111,72 +113,96 @@ newopt(ctx_t *ctx, const char *name, const char *help, void *ptr, void *ptrlen, 
     opt.dtype = dtype;
     opt.processed = false;
     opt.def = def;
+    opt.delim = delim;
 
     da_append(&ctx->optlist, opt);
 
     return false;
 }
 
-
 int
-match_ident(const char *s)
+match_ident(const char *s, char delim)
 {
     size_t n = 0;
     for (;;) {
         // reached end of current identifier
-        if (isperiod(s[n]) || iseos(s[n])) {
+        if ((s[n] == delim) || (s[n] == '\0')) {
             return n;
         }
         // invalid identifier char
-        if (!(isletter(s[n]) || isuscore(s[n]) || isnumber(s[n])))
+        if (!(isletter(s[n]) || (s[n] == '_') || isnumber(s[n])))
             return -(n + 1);
         n++;
     }
 }
 
-bool
-parse_chain(ctx_t *ctx, const char *chain, uslicelist_t *list)
+int
+parse_opt_list(ctx_t *ctx, opt_t *opt, char *arg, char *nextarg)
 {
-    da_init(list, 1);
-    size_t len = strlen(chain);
+    struct strlist {
+        int count;
+        int capacity;
+        char **items;
+    } slist;
+    da_init(&slist, 1);
+
+    // original count to reset arena to original state upon error
+    size_t orig_count = ctx->arena.count;
+
+    int rc;
+    char *chain;
+    size_t len = strlen(arg);
+    if (len == opt->namelen) {
+        rc = 2;
+        chain = nextarg;
+    } else {
+        rc = 1;
+        chain = &arg[len];
+    }
+
     size_t i = 0;
     size_t n = 0;
     for (;;) {
-        int l = match_ident(chain + i);
+        int l = match_ident(chain + i, opt->delim);
 
         // match error
         if (l < 0) {
             ustr_builder_printf(&ctx->errorlog, "Invalid char in chain\n");
             ustr_builder_printf(&ctx->errorlog, "%s\n", chain);
             ustr_builder_printf(&ctx->errorlog, "%*s\n", i - l, "^");
-            da_delete(list);
-            return true;
+            ctx->arena.count = orig_count;
+            rc = -1;
+            break;
         }
 
-        // add slice to list
-        da_append(list, ((uslice_t) { .len = l, .str = chain + i }));
+        char *str = ustr_builder_printf(&ctx->arena, "%.*s", l, chain + i);
+        ustr_builder_terminate(&ctx->arena);
+
+        da_append(&slist, str);
+
         i += l;
 
         // reached end of chain string
-        if (iseos(chain[i]))
+        if (chain[i] == '\0')
             break;
 
         // jump over divider
-        else if (isperiod(chain[i]) && !iseos(chain[i+1]))
+        else if ((chain[i] == opt->delim) && !(chain[i+1] == '\0'))
             i++;
 
-        // trailing period
+        // trailing delimiter
         else {
-            ustr_builder_printf(&ctx->errorlog, "Trailing period in chain\n");
-            ustr_builder_printf(&ctx->errorlog, "%s\n", chain);
-            ustr_builder_printf(&ctx->errorlog, "%*s\n", i+1, "^");
-            da_delete(list);
-            return true;
+            // ignore
+            break;
         }
     }
 
-    da_resize(list, list->count);
-    return false;
+    if (rc > 0) {
+        *(char ***)opt->ptr = slist.items;
+        *opt->ptrlen = slist.count;
+    }
+
+    return rc;
 }
 
 void
@@ -184,7 +210,7 @@ cargs_init(cargs_t *context)
 {
     UASSERT(context);
     ctx_t *ctx = umalloc(sizeof(ctx_t));
-    da_init(&ctx->arena, 4096);
+    ustr_builder_alloc(&ctx->arena);
     da_init(&ctx->optlist, 1);
     ustr_builder_alloc(&ctx->errorlog);
     ctx->namemaxlen = 0;
@@ -198,7 +224,7 @@ cargs_delete(cargs_t *context)
     UASSERT(context);
     UASSERT(*context);
     ctx_t *ctx = (ctx_t *)*context;
-    da_delete(&ctx->arena);
+    ustr_builder_free(&ctx->arena);
     da_delete(&ctx->optlist);
     if (ctx->errorlog.items)
         ustr_builder_free(&ctx->errorlog);
@@ -213,64 +239,69 @@ cargs_error(cargs_t context)
     ctx_t *ctx = (ctx_t *)context;
     if (*da_last_item(&ctx->errorlog) == '\n')
         da_pop(&ctx->errorlog);
-    return ustr_builder_terminate(&ctx->errorlog);
+    ustr_builder_terminate(&ctx->errorlog);
+    return ctx->errorlog.items;
 }
 
 bool
 cargs_add_opt_flag(cargs_t context, bool *v, bool def, const char *name, const char *help)
 {
     UASSERT(context);
-    return newopt((ctx_t *)context, name, help, (void *)v, NULL, (uintptr_t)def, CARGS_BOOL);
+    return newopt((ctx_t *)context, name, help, (void *)v, NULL, '\0', (uintptr_t)def, CARGS_BOOL);
 }
 
 bool
 cargs_add_opt_int(cargs_t context, int *v, int def, const char *name, const char *help)
 {
     UASSERT(context);
-    return newopt((ctx_t *)context, name, help, (void *)v, NULL, (uintptr_t)def, CARGS_INT);
+    return newopt((ctx_t *)context, name, help, (void *)v, NULL, '\0', (uintptr_t)def, CARGS_INT);
 }
 
 bool
 cargs_add_opt_float(cargs_t context, float *v, float def, const char *name, const char *help)
 {
     UASSERT(context);
-    return newopt((ctx_t *)context, name, help, (void *)v, NULL, (uintptr_t)def, CARGS_FLOAT);
+    return newopt((ctx_t *)context, name, help, (void *)v, NULL, '\0', (uintptr_t)def, CARGS_FLOAT);
 }
 
 bool
 cargs_add_opt_str(cargs_t context, char **v, const char *def, const char *name, const char *help)
 {
     UASSERT(context);
-    return newopt((ctx_t *)context, name, help, (void *)v, NULL, (uintptr_t)def, CARGS_STR);
+    return newopt((ctx_t *)context, name, help, (void *)v, NULL, '\0', (uintptr_t)def, CARGS_STR);
 }
 
-// void
-// cargs_add_opt_chain(cargs_t context, char **v, int *vlen, const char *name, const char *help)
-// {
-// }
+bool
+cargs_add_opt_list(cargs_t context, char ***v, int *vlen, char delim, const char *name, const char *help)
+{
+    UASSERT(context);
+    return newopt((ctx_t *)context, name, help, (void *)v, vlen, delim, 0, CARGS_LIST);
+}
 
 const char *
 cargs_help(cargs_t context, const char *name)
 {
     UASSERT(context);
+    UASSERT(name);
     ctx_t *ctx = (ctx_t *)context;
 
-    ustr_builder_t helpmsg;
-    ustr_builder_alloc(&helpmsg);
+    char *helpmsg = da_endptr(&ctx->arena);
 
     size_t nw = ctx->namemaxlen;
     size_t hw = ctx->helpmaxlen;
 
-    ustr_builder_printf(&helpmsg, "Usage: %s [FLAGS] [OPTIONS] command\n\nOptions:\n", name);
+    ustr_builder_printf(&ctx->arena, "Usage: %s [OPTIONS] command\n\nOptions:\n", name);
 
     size_t len = 0;
     for (int i = 0; i < ctx->optlist.count; i++) {
-        ustr_builder_printf(&helpmsg, "   %-*s   %s", nw, ctx->optlist.items[i].name, ctx->optlist.items[i].help);
+        ustr_builder_printf(&ctx->arena, "   %-*s   %s", nw, ctx->optlist.items[i].name, ctx->optlist.items[i].help);
         if (i < ctx->optlist.count - 1)
-            da_append(&helpmsg, '\n');
+            ustr_builder_putc(&ctx->arena, '\n');
     }
 
-    return ustr_builder_leak(&helpmsg);
+    ustr_builder_terminate(&ctx->arena);
+
+    return helpmsg;
 }
 
 int
@@ -472,10 +503,9 @@ cargs_parse(cargs_t context, const char *name, int argc, char **argv)
         case CARGS_INT: n = parse_opt_int(ctx, opt, arg, nextarg); break;
         case CARGS_FLOAT: n = parse_opt_float(ctx, opt, arg, nextarg); break;
         case CARGS_STR: n = parse_opt_str(ctx, opt, arg, nextarg); break;
-        case CARGS_CHAIN:
+        case CARGS_LIST: n = parse_opt_list(ctx, opt, arg, nextarg); break;
         default:
-            n = -1;
-            ustr_builder_printf(&ctx->errorlog, "unimplemented arg dtype '%d'\n", opt->dtype);
+            UASSERT(0 && "unreachable");
             break;
         }
 
@@ -506,7 +536,9 @@ cargs_parse(cargs_t context, const char *name, int argc, char **argv)
         case CARGS_STR:
             *(char **)opt->ptr = (char *)opt->def;
             break;
-        case CARGS_CHAIN:
+        case CARGS_LIST:
+            *(char ***)opt->ptr = (char **)opt->def;
+            *opt->ptrlen = 0;
         default:
             break;
         }
